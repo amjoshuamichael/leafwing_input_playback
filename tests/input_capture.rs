@@ -15,27 +15,32 @@ const TEST_PRESS: KeyboardInput = KeyboardInput {
     scan_code: 1,
     key_code: Some(KeyCode::F),
     state: ButtonState::Pressed,
+    window: Entity::from_raw(0),
 };
 
 const TEST_RELEASE: KeyboardInput = KeyboardInput {
     scan_code: 1,
     key_code: Some(KeyCode::F),
     state: ButtonState::Released,
+    window: Entity::from_raw(0),
 };
 
 const TEST_MOUSE: MouseButtonInput = MouseButtonInput {
     button: MouseButton::Left,
     state: ButtonState::Pressed,
+    window: Entity::from_raw(0),
 };
 
 fn capture_app() -> App {
     let mut app = App::new();
 
-    app.add_plugins(MinimalPlugins)
-        .add_plugin(WindowPlugin::default())
-        .add_plugin(InputPlugin)
-        .add_plugin(InputCapturePlugin);
-
+    app.add_plugins((
+        MinimalPlugins,
+        WindowPlugin::default(),
+        InputPlugin,
+        InputCapturePlugin,
+    ));
+        
     app
 }
 
@@ -133,6 +138,9 @@ fn toggle_input_capture() {
     let timestamped_input = app.world.resource::<TimestampedInputs>();
     assert_eq!(timestamped_input.len(), 2);
 
+    app.update();
+    dbg!(&app.world.resource::<TimestampedInputs>().len());
+
     // Partially re-enabling input capture
     let mut input_modes_captured = app.world.resource_mut::<InputModesCaptured>();
     *input_modes_captured = InputModesCaptured {
@@ -141,13 +149,21 @@ fn toggle_input_capture() {
         ..Default::default()
     };
 
+    app.update();
+    dbg!(&app.world.resource::<TimestampedInputs>().len());
+
+    app.update();
+    dbg!(&app.world.resource::<TimestampedInputs>().len());
     let mut keyboard_events = app.world.resource_mut::<Events<KeyboardInput>>();
     keyboard_events.send(TEST_PRESS);
 
+    app.update();
+    dbg!(&app.world.resource::<TimestampedInputs>().len());
     let mut mouse_events = app.world.resource_mut::<Events<MouseButtonInput>>();
     mouse_events.send(TEST_MOUSE);
 
     app.update();
+    dbg!(&app.world.resource::<TimestampedInputs>().len());
 
     // Only the keyboard events (and app exit events) were captured
     let timestamped_input = app.world.resource::<TimestampedInputs>();
