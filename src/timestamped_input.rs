@@ -6,7 +6,7 @@ use bevy::app::AppExit;
 use bevy::ecs::prelude::*;
 use bevy::input::gamepad::GamepadEvent;
 use bevy::input::keyboard::KeyboardInput;
-use bevy::input::mouse::{MouseButtonInput, MouseWheel};
+use bevy::input::mouse::{MouseButtonInput, MouseWheel, MouseMotion};
 use bevy::utils::Duration;
 use bevy::window::CursorMoved;
 use serde::{Deserialize, Serialize};
@@ -19,17 +19,20 @@ use crate::frame_counting::FrameCount;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TimestampedInputEvent {
     /// The number of frames that have elapsed since the app began
+    #[serde(rename = "f")]
     pub frame: FrameCount,
     /// The amount of time that has elapsed since the app began
+    #[serde(rename = "t")]
     pub time_since_startup: Duration,
     /// The [`InputEvent`] that was captured
+    #[serde(rename = "i")]
     pub input_event: InputEvent,
 }
 
 /// A resource that stores the complete event-like list of [`TimestampedInputs`]
 ///
 /// Read and write to this struct when performing input capture and playback
-#[derive(Resource, Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Resource, Debug, Clone, Default, PartialEq)]
 pub struct TimestampedInputs {
     /// The underlying [`TimestampedInputEvent`] data
     ///
@@ -361,6 +364,7 @@ pub enum InputEvent {
     MouseButton(MouseButtonInput),
     MouseWheel(MouseWheel),
     CursorMoved(CursorMoved),
+    MouseMotion(MouseMotion),
     Gamepad(GamepadEvent),
     AppExit,
 }
@@ -386,6 +390,12 @@ impl From<MouseWheel> for InputEvent {
 impl From<CursorMoved> for InputEvent {
     fn from(event: CursorMoved) -> Self {
         InputEvent::CursorMoved(event)
+    }
+}
+
+impl From<MouseMotion> for InputEvent {
+    fn from(event: MouseMotion) -> Self {
+        InputEvent::MouseMotion(event)
     }
 }
 

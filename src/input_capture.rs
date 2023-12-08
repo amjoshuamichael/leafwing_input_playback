@@ -6,14 +6,14 @@ use bevy::prelude::*;
 use bevy::app::AppExit;
 use bevy::input::gamepad::GamepadEvent;
 use bevy::input::keyboard::KeyboardInput;
-use bevy::input::mouse::{MouseButtonInput, MouseWheel};
+use bevy::input::mouse::{MouseButtonInput, MouseWheel, MouseMotion};
 use bevy::time::Time;
 use bevy::window::CursorMoved;
 use ron::ser::PrettyConfig;
 
 use crate::frame_counting::{frame_counter, FrameCount};
 use crate::serde::PlaybackFilePath;
-use crate::timestamped_input::TimestampedInputs;
+use crate::timestamped_input::{TimestampedInputs, InputEvent};
 use std::fs::OpenOptions;
 use std::io::Write;
 
@@ -37,13 +37,13 @@ impl Plugin for InputCapturePlugin {
             .init_resource::<InputModesCaptured>()
             .init_resource::<PlaybackFilePath>()
             .add_systems(Last, 
-                // Capture any mocked input as well
-                capture_input
+                 (
+                    // Capture any mocked input as well
+                    capture_input,
+                    serialize_captured_input_and_save_to_file.after(capture_input),
+                )
             )
-            .add_systems(Last, 
-                serialize_captured_input_on_exit
-                    .after(capture_input),
-            );
+            .add_systems(Startup, make_playback_file);
     }
 }
 
@@ -90,6 +90,14 @@ impl Default for InputModesCaptured {
     }
 }
 
+/// Creates the file that input is saved to.
+pub fn make_playback_file(playback_file: Res<PlaybackFilePath>) {
+    if let Some(file_path) = playback_file.path() {
+        std::fs::File::create(&file_path).expect("unable to create input records file");
+    }
+}
+
+
 /// Captures input from the [`bevy::window`] and [`bevy::input`] event streams.
 ///
 /// The input modes can be controlled via the [`InputModesCaptured`] resource.
@@ -98,6 +106,7 @@ pub fn capture_input(
     mut mouse_button_events: EventReader<MouseButtonInput>,
     mut mouse_wheel_events: EventReader<MouseWheel>,
     mut cursor_moved_events: EventReader<CursorMoved>,
+    mut mouse_motion_events: EventReader<MouseMotion>,
     mut keyboard_events: EventReader<KeyboardInput>,
     mut gamepad_events: EventReader<GamepadEvent>,
     mut app_exit_events: EventReader<AppExit>,
@@ -136,6 +145,12 @@ pub fn capture_input(
             time_since_startup,
             cursor_moved_events.read().cloned(),
         );
+
+        timestamped_input.send_multiple(
+            frame,
+            time_since_startup,
+            mouse_motion_events.read().cloned(),
+        );
     } else {
         cursor_moved_events.clear();
     }
@@ -168,36 +183,26 @@ pub fn capture_input(
 }
 
 /// Serializes captured input to the path given in the [`PlaybackFilePath`] resource.
-///
-/// This data is only serialized once when [`AppExit`] is sent.
-/// Use the [`serialized_timestamped_inputs`] function directly if you want to implement custom checkpointing strategies.
-pub fn serialize_captured_input_on_exit(
-    app_exit_events: EventReader<AppExit>,
+pub fn serialize_captured_input_and_save_to_file(
     playback_file: Res<PlaybackFilePath>,
     captured_inputs: Res<TimestampedInputs>,
-) {
-    if !app_exit_events.is_empty() {
-        serialize_timestamped_inputs(&captured_inputs, &playback_file);
-    }
-}
-
-/// Writes the `timestamped_inputs` to the provided `path` (which should store [`Some(PathBuf)`]).
-pub fn serialize_timestamped_inputs(
-    timestamped_inputs: &TimestampedInputs,
-    playback_file: &PlaybackFilePath,
+    mut last_serialized_index: Local<usize>,
 ) {
     if let Some(file_path) = playback_file.path() {
-        let mut file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(file_path)
-            .expect("Could not open file.");
-        write!(
-            file,
-            "{}",
-            ron::ser::to_string_pretty(timestamped_inputs, PrettyConfig::default())
-                .expect("Could not convert captured input to a string.")
-        )
-        .expect("Could not write string to file.");
+        for i in *last_serialized_index..captured_inputs.len() {
+            let mut file = OpenOptions::new()
+                .append(true)
+                .open(file_path)
+                .expect("Could not open file.");
+            write!(
+                file,
+                "{},\n",
+                ron::ser::to_string(&captured_inputs.events[i])
+                    .expect("Could not convert captured input to a string.")
+            )
+            .expect("Could not write string to file.");
+        }
+
+        *last_serialized_index = captured_inputs.len();
     }
 }

@@ -21,7 +21,7 @@ impl PlaybackFilePath {
     /// Only `.ron` files are supported, and so this method will panic if a path with an incompatible extension is provided.
     pub fn new(path_str: &str) -> Self {
         let path: PathBuf = path_str.into();
-        assert_eq!(path.extension().unwrap(), "ron");
+        assert_eq!(path.extension().expect("playback path had no extension"), "ron");
 
         PlaybackFilePath { path: Some(path) }
     }

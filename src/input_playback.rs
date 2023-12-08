@@ -2,6 +2,7 @@
 //!
 //! These are played back by emulating assorted Bevy input events.
 
+use bevy::input::mouse::MouseMotion;
 use bevy::prelude::*;
 use bevy::app::AppExit;
 use bevy::ecs::system::SystemParam;
@@ -12,7 +13,6 @@ use bevy::input::{
 };
 use bevy::utils::Duration;
 use bevy::window::{CursorMoved, Window};
-use ron::de::from_reader;
 use std::fs::File;
 
 use crate::frame_counting::{frame_counter, FrameCount};
@@ -93,6 +93,7 @@ pub struct InputWriters<'w, 's> {
     pub keyboard_input: EventWriter<'w, KeyboardInput>,
     pub mouse_button_input: EventWriter<'w, MouseButtonInput>,
     pub mouse_wheel: EventWriter<'w, MouseWheel>,
+    pub mouse_motion: EventWriter<'w, MouseMotion>,
     pub cursor_moved: EventWriter<'w, CursorMoved>,
     pub windows: Query<'w, 's, &'static mut Window>,
     pub gamepad: EventWriter<'w, GamepadEvent>,
@@ -200,6 +201,7 @@ fn send_playback_events(
 
                 input_writers.cursor_moved.send(e)
             }
+            MouseMotion(e) => input_writers.mouse_motion.send(e),
             Gamepad(e) => {
                 input_writers.gamepad.send(e);
             }
@@ -213,9 +215,21 @@ pub fn deserialize_timestamped_inputs(
     mut timestamped_inputs: ResMut<TimestampedInputs>,
     playback_path: Res<PlaybackFilePath>,
 ) {
+    use std::io::Read;
+    use ron::de::from_str;
+
     if let Some(file_path) = playback_path.path() {
-        let file = File::open(file_path).unwrap();
-        *timestamped_inputs = from_reader(file).unwrap();
+        let mut file = File::open(file_path).unwrap();
+
+        let mut string = String::from("[");
+        file.read_to_string(&mut string).expect("Could not read playback");
+        string += "]";
+
+        let inputs: Vec<TimestampedInputEvent> = from_str(&*string).unwrap();
+        *timestamped_inputs = TimestampedInputs {
+            events: inputs,
+            cursor: 0,
+        }
     }
 }
 
